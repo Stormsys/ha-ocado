@@ -1,0 +1,35 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect your Ocado account",
+        "description": "Enter your Ocado session and refresh tokens. These must be captured from the Ocado iOS/Android app using a proxy tool like Charles Proxy. Username/password login is not supported. See [{docs_url}]({docs_url}) for instructions.",
+        "data": {
+          "session_token": "Session Token",
+          "refresh_token": "Refresh Token"
+        },
+        "data_description": {
+          "session_token": "The opaque session token (~100 chars) from the Authorization header",
+          "refresh_token": "The RS256 JWT refresh token (starts with eyJ...)"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate with Ocado",
+        "description": "Your Ocado tokens have expired. Please provide new tokens captured from the Ocado app.",
+        "data": {
+          "session_token": "Session Token",
+          "refresh_token": "Refresh Token"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Invalid tokens. Please verify your session and refresh tokens are correct and not expired.",
+      "cannot_connect": "Unable to connect to the Ocado API. Please check your network connection.",
+      "unknown": "An unexpected error occurred. Check the Home Assistant logs for details."
+    },
+    "abort": {
+      "already_configured": "This Ocado account is already configured.",
+      "reauth_successful": "Re-authentication successful."
+    }
+  }
+}
