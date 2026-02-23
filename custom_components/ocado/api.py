@@ -154,9 +154,10 @@ class OcadoApiClient:
             headers=headers,
             json={"refreshToken": self._tokens.refresh_token},
         ) as resp:
-            if resp.status == 401:
+            if resp.status in (400, 401):
                 raise OcadoAuthError(
-                    "Refresh token rejected. A new token must be obtained "
+                    "Refresh token rejected (HTTP "
+                    f"{resp.status}). A new token must be obtained "
                     "from the Ocado app."
                 )
             resp.raise_for_status()
