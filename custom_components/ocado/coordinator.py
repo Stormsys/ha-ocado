@@ -64,7 +64,12 @@ class OcadoCoordinator(DataUpdateCoordinator[OcadoData]):
         self._refresh_counter += 1
         if self._refresh_counter >= self._refresh_every_n:
             self._refresh_counter = 0
-            await self._async_refresh_and_persist()
+            try:
+                await self._async_refresh_and_persist()
+            except OcadoAuthError:
+                raise ConfigEntryAuthFailed(
+                    "Ocado token refresh failed. Please re-authenticate."
+                )
 
         try:
             return await self.client.async_get_all_data()

@@ -154,10 +154,10 @@ class OcadoApiClient:
             headers=headers,
             json={"refreshToken": self._tokens.refresh_token},
         ) as resp:
-            if resp.status == 401:
+            if resp.status in (400, 401, 403):
                 raise OcadoAuthError(
-                    "Refresh token rejected. A new token must be obtained "
-                    "from the Ocado app."
+                    f"Refresh token rejected ({resp.status}). A new token "
+                    "must be obtained from the Ocado app."
                 )
             resp.raise_for_status()
             data = await resp.json()
@@ -250,11 +250,19 @@ class OcadoApiClient:
         addr = delivery.get("address", {})
         price = o.get("totalPrice", {})
         slot_cost = slot.get("cost", {})
+        # items may be an int count, a list of items, or absent
+        raw_items = o.get("items", 0)
+        if isinstance(raw_items, list):
+            items_count = len(raw_items)
+        elif isinstance(raw_items, int):
+            items_count = raw_items
+        else:
+            items_count = 0
         return OcadoOrder(
             id=o.get("id", ""),
             status=o.get("status", ""),
             status_message=o.get("statusMessage", ""),
-            items_count=o.get("items", 0),
+            items_count=items_count,
             total_price=price.get("amount", "0"),
             currency=price.get("currency", "GBP"),
             delivery_address=addr.get("address", ""),
@@ -332,14 +340,34 @@ class OcadoApiClient:
         # Cart structure varies; handle gracefully
         if isinstance(data, dict):
             items = data.get("products", data.get("items", []))
-            item_count = len(items) if isinstance(items, list) else 0
-            total = data.get("totalPrice", data.get("total", {}))
-            if isinstance(total, dict):
-                price = total.get("amount", "0.00")
-                currency = total.get("currency", "GBP")
+            if isinstance(items, list):
+                item_count = sum(
+                    item.get("quantity", 1) if isinstance(item, dict) else 1
+                    for item in items
+                )
             else:
-                price = str(total) if total else "0.00"
-                currency = "GBP"
+                item_count = 0
+
+            # Try totals.itemPriceAfterPromos (v1/carts/active), then
+            # totalPrice / total as fallback
+            totals = data.get("totals", {})
+            price_obj = (
+                totals.get("itemPriceAfterPromos")
+                if isinstance(totals, dict)
+                else None
+            )
+            if isinstance(price_obj, dict):
+                price = price_obj.get("amount", "0.00")
+                currency = price_obj.get("currency", "GBP")
+            else:
+                total = data.get("totalPrice", data.get("total", {}))
+                if isinstance(total, dict):
+                    price = total.get("amount", "0.00")
+                    currency = total.get("currency", "GBP")
+                else:
+                    price = str(total) if total else "0.00"
+                    currency = "GBP"
+
             return OcadoCart(
                 item_count=item_count,
                 total_price=price,
@@ -364,12 +392,18 @@ class OcadoApiClient:
     # ── Full data fetch (used by coordinator) ─────────────────────────────
 
     async def async_get_all_data(self) -> OcadoData:
-        """Fetch all data in one go for the coordinator."""
+        """Fetch all data in one go for the coordinator.
+
+        OcadoAuthError is allowed to propagate so the coordinator can
+        trigger a re-authentication flow.
+        """
         result = OcadoData()
 
         # User
         try:
             result.user = await self.async_get_user()
+        except OcadoAuthError:
+            raise
         except Exception:
             _LOGGER.warning("Failed to fetch Ocado user profile", exc_info=True)
 
@@ -378,24 +412,36 @@ class OcadoApiClient:
             orders = await self.async_get_recent_orders()
             result.upcoming_orders = orders.get("upcoming", [])
             result.delivered_orders = orders.get("delivered", [])
+            # Sort delivered orders by slot start descending so [0] is most recent
+            result.delivered_orders.sort(
+                key=lambda o: o.delivery_slot_start, reverse=True
+            )
+        except OcadoAuthError:
+            raise
         except Exception:
             _LOGGER.warning("Failed to fetch Ocado orders", exc_info=True)
 
         # Active order count
         try:
             result.active_order_count = await self.async_get_active_order_count()
+        except OcadoAuthError:
+            raise
         except Exception:
             _LOGGER.debug("Failed to fetch active order count", exc_info=True)
 
         # Cart
         try:
             result.cart = await self.async_get_cart()
+        except OcadoAuthError:
+            raise
         except Exception:
             _LOGGER.debug("Failed to fetch Ocado cart", exc_info=True)
 
         # Next slot
         try:
             result.next_slot = await self.async_get_next_slot()
+        except OcadoAuthError:
+            raise
         except Exception:
             _LOGGER.debug("Failed to fetch next delivery slot", exc_info=True)
 
@@ -405,6 +451,8 @@ class OcadoApiClient:
             if sub:
                 result.has_delivery_subscription = True
                 result.subscription_type = sub.get("type", sub.get("name", "Active"))
+        except OcadoAuthError:
+            raise
         except Exception:
             _LOGGER.debug("Failed to fetch subscription", exc_info=True)
 
