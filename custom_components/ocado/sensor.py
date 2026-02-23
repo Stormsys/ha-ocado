@@ -83,7 +83,6 @@ SENSOR_DESCRIPTIONS: tuple[OcadoSensorEntityDescription, ...] = (
         attributes_fn=lambda d: (
             {
                 "order_id": d.upcoming_orders[0].id,
-                "delivery_end": d.upcoming_orders[0].delivery_slot_end,
                 "delivery_method": d.upcoming_orders[0].delivery_method,
                 "address": d.upcoming_orders[0].delivery_address,
             }
@@ -92,14 +91,23 @@ SENSOR_DESCRIPTIONS: tuple[OcadoSensorEntityDescription, ...] = (
         ),
     ),
     OcadoSensorEntityDescription(
-        key="next_delivery_slot",
-        translation_key="next_delivery_slot",
-        icon="mdi:clock-outline",
+        key="next_delivery_slot_end",
+        translation_key="next_delivery_slot_end",
+        icon="mdi:clock-end",
+        device_class=SensorDeviceClass.TIMESTAMP,
         value_fn=lambda d: (
-            f"{d.upcoming_orders[0].delivery_slot_start} - "
-            f"{d.upcoming_orders[0].delivery_slot_end}"
+            _parse_iso_date(d.upcoming_orders[0].delivery_slot_end)
             if d.upcoming_orders
-            else "No delivery scheduled"
+            else None
+        ),
+        attributes_fn=lambda d: (
+            {
+                "slot_start": d.upcoming_orders[0].delivery_slot_start,
+                "slot_end": d.upcoming_orders[0].delivery_slot_end,
+                "delivery_method": d.upcoming_orders[0].delivery_method,
+            }
+            if d.upcoming_orders
+            else {}
         ),
     ),
     OcadoSensorEntityDescription(
@@ -109,7 +117,7 @@ SENSOR_DESCRIPTIONS: tuple[OcadoSensorEntityDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement="items",
         value_fn=lambda d: (
-            d.upcoming_orders[0].items_count if d.upcoming_orders else 0
+            d.upcoming_orders[0].items_count if d.upcoming_orders else None
         ),
     ),
     OcadoSensorEntityDescription(
@@ -118,12 +126,15 @@ SENSOR_DESCRIPTIONS: tuple[OcadoSensorEntityDescription, ...] = (
         icon="mdi:currency-gbp",
         device_class=SensorDeviceClass.MONETARY,
         native_unit_of_measurement="GBP",
+        suggested_display_precision=2,
         value_fn=lambda d: (
             float(d.upcoming_orders[0].total_price) if d.upcoming_orders else None
         ),
         attributes_fn=lambda d: (
             {
-                "slot_cost": d.upcoming_orders[0].slot_cost,
+                "slot_cost": float(d.upcoming_orders[0].slot_cost)
+                if d.upcoming_orders[0].slot_cost
+                else None,
                 "currency": d.upcoming_orders[0].currency,
             }
             if d.upcoming_orders
@@ -135,7 +146,7 @@ SENSOR_DESCRIPTIONS: tuple[OcadoSensorEntityDescription, ...] = (
         translation_key="next_delivery_status",
         icon="mdi:truck-check",
         value_fn=lambda d: (
-            d.upcoming_orders[0].status_message if d.upcoming_orders else "No orders"
+            d.upcoming_orders[0].status_message if d.upcoming_orders else None
         ),
         attributes_fn=lambda d: (
             {
@@ -169,6 +180,7 @@ SENSOR_DESCRIPTIONS: tuple[OcadoSensorEntityDescription, ...] = (
         icon="mdi:cart-variant",
         device_class=SensorDeviceClass.MONETARY,
         native_unit_of_measurement="GBP",
+        suggested_display_precision=2,
         value_fn=lambda d: float(d.cart.total_price) if d.cart.total_price else 0.0,
     ),
     # ── Slot availability ─────────────────────────────────────────────────
@@ -182,7 +194,7 @@ SENSOR_DESCRIPTIONS: tuple[OcadoSensorEntityDescription, ...] = (
         ),
         attributes_fn=lambda d: (
             {
-                "end_time": d.next_slot.end_time,
+                "end_time": _parse_iso_date(d.next_slot.end_time),
                 "slot_type": d.next_slot.slot_type,
                 "delivery_method": d.next_slot.delivery_method,
                 "address": d.next_slot.address,
@@ -206,8 +218,10 @@ SENSOR_DESCRIPTIONS: tuple[OcadoSensorEntityDescription, ...] = (
             {
                 "order_id": d.delivered_orders[0].id,
                 "items": d.delivered_orders[0].items_count,
-                "total": f"{d.delivered_orders[0].currency} "
-                f"{d.delivered_orders[0].total_price}",
+                "total": float(d.delivered_orders[0].total_price)
+                if d.delivered_orders[0].total_price
+                else 0.0,
+                "currency": d.delivered_orders[0].currency,
             }
             if d.delivered_orders
             else {}
@@ -218,7 +232,7 @@ SENSOR_DESCRIPTIONS: tuple[OcadoSensorEntityDescription, ...] = (
         key="delivery_subscription",
         translation_key="delivery_subscription",
         icon="mdi:star-circle",
-        value_fn=lambda d: d.subscription_type if d.has_delivery_subscription else "None",
+        value_fn=lambda d: d.subscription_type if d.has_delivery_subscription else "Inactive",
         attributes_fn=lambda d: {
             "active": d.has_delivery_subscription,
         },
@@ -229,14 +243,14 @@ SENSOR_DESCRIPTIONS: tuple[OcadoSensorEntityDescription, ...] = (
         translation_key="account_name",
         icon="mdi:account",
         entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda d: d.user.full_name or d.user.first_name or "Unknown",
+        value_fn=lambda d: d.user.full_name or d.user.first_name or None,
     ),
     OcadoSensorEntityDescription(
         key="account_email",
         translation_key="account_email",
         icon="mdi:email",
         entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda d: d.user.username or "Unknown",
+        value_fn=lambda d: d.user.username or None,
     ),
 )
 

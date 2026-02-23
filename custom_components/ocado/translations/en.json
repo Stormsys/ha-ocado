@@ -40,8 +40,8 @@
       "next_delivery_date": {
         "name": "Next Delivery"
       },
-      "next_delivery_slot": {
-        "name": "Next Delivery Slot"
+      "next_delivery_slot_end": {
+        "name": "Next Delivery Slot End"
       },
       "next_delivery_items": {
         "name": "Next Delivery Items"
