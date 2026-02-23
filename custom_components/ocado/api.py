@@ -280,7 +280,8 @@ class OcadoApiClient:
         data = await self._request(
             "POST",
             f"{API_BASE}/v2/delivery/locations",
-            params={"deliveryMethod": "HOME_DELIVERY"},
+            headers=self._headers({"Content-Type": "application/json"}),
+            json={"deliveryMethod": "HOME_DELIVERY"},
         )
         if not isinstance(data, list):
             data = [data] if data else []
@@ -299,8 +300,16 @@ class OcadoApiClient:
     async def async_get_next_slot(self) -> Optional[OcadoDeliverySlot]:
         """GET /v4/slot/next-available."""
         if not self._delivery_destination_id:
-            await self.async_get_delivery_destinations()
+            try:
+                await self.async_get_delivery_destinations()
+            except Exception:
+                _LOGGER.warning(
+                    "Failed to fetch delivery destinations", exc_info=True
+                )
         if not self._delivery_destination_id:
+            _LOGGER.warning(
+                "No delivery destination ID available — cannot fetch next slot"
+            )
             return None
 
         try:
@@ -310,7 +319,7 @@ class OcadoApiClient:
                 params={"deliveryDestinationId": self._delivery_destination_id},
             )
         except Exception:
-            _LOGGER.debug("Could not fetch next available slot", exc_info=True)
+            _LOGGER.warning("Could not fetch next available slot", exc_info=True)
             return None
 
         slot = data.get("slot", {})
@@ -339,6 +348,11 @@ class OcadoApiClient:
 
         # Cart structure varies; handle gracefully
         if isinstance(data, dict):
+            # Capture deliveryDestinationId for slot lookup
+            dest_id = data.get("deliveryDestinationId")
+            if dest_id:
+                self._delivery_destination_id = dest_id
+
             items = data.get("products", data.get("items", []))
             if isinstance(items, list):
                 item_count = sum(
