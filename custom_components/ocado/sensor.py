@@ -30,7 +30,9 @@ def _parse_iso_date(dt_str: str) -> datetime | None:
     if not dt_str:
         return None
     try:
-        return datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
+        # Strip Java-style timezone suffix e.g. "[Europe/London]"
+        cleaned = dt_str.split("[")[0]
+        return datetime.fromisoformat(cleaned.replace("Z", "+00:00"))
     except (ValueError, TypeError):
         return None
 

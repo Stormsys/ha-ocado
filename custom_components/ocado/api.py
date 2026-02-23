@@ -250,11 +250,19 @@ class OcadoApiClient:
         addr = delivery.get("address", {})
         price = o.get("totalPrice", {})
         slot_cost = slot.get("cost", {})
+
+        # items may be an int, a list of product dicts, or absent
+        raw_items = o.get("items", o.get("itemCount", 0))
+        if isinstance(raw_items, list):
+            items_count = len(raw_items)
+        else:
+            items_count = int(raw_items) if raw_items else 0
+
         return OcadoOrder(
             id=o.get("id", ""),
             status=o.get("status", ""),
             status_message=o.get("statusMessage", ""),
-            items_count=o.get("items", 0),
+            items_count=items_count,
             total_price=price.get("amount", "0"),
             currency=price.get("currency", "GBP"),
             delivery_address=addr.get("address", ""),
@@ -333,13 +341,30 @@ class OcadoApiClient:
         if isinstance(data, dict):
             items = data.get("products", data.get("items", []))
             item_count = len(items) if isinstance(items, list) else 0
-            total = data.get("totalPrice", data.get("total", {}))
-            if isinstance(total, dict):
-                price = total.get("amount", "0.00")
-                currency = total.get("currency", "GBP")
+
+            # Try nested totals structure first (totals.itemPriceAfterPromos)
+            totals = data.get("totals", {})
+            if isinstance(totals, dict) and totals:
+                price_obj = totals.get(
+                    "itemPriceAfterPromos",
+                    totals.get("itemsRetailPrice", {}),
+                )
+                if isinstance(price_obj, dict):
+                    price = price_obj.get("amount", "0.00")
+                    currency = price_obj.get("currency", "GBP")
+                else:
+                    price = str(price_obj) if price_obj else "0.00"
+                    currency = "GBP"
             else:
-                price = str(total) if total else "0.00"
-                currency = "GBP"
+                # Fall back to flat totalPrice / total keys
+                total = data.get("totalPrice", data.get("total", {}))
+                if isinstance(total, dict):
+                    price = total.get("amount", "0.00")
+                    currency = total.get("currency", "GBP")
+                else:
+                    price = str(total) if total else "0.00"
+                    currency = "GBP"
+
             return OcadoCart(
                 item_count=item_count,
                 total_price=price,
