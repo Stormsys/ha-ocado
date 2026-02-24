@@ -1,6 +1,6 @@
 {
   "domain": "ocado",
-  "name": "Ocado",
+  "name": "Ocado API",
   "codeowners": ["@stormsys"],
   "config_flow": true,
   "dependencies": [],
